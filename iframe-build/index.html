@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>NOLA Skyline Shader</title>
+<style>
+  html,body{margin:0;height:100%;background:#0B1633;overflow:hidden;cursor:crosshair;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;color:#E9EEF9}
+  html,body{width:100%;max-width:100%;overscroll-behavior:none}
+  *{box-sizing:border-box}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  .skyline{
+    position:fixed;left:0;right:0;bottom:0;width:100%;
+    pointer-events:none;z-index:5;user-select:none;
+    /* The PNG has a light wash behind the silhouette; blend so only dark pixels punch through */
+    mix-blend-mode:multiply;
+    filter: contrast(1.15) saturate(.6);
+  }
+  .logo-wrap{
+    position:fixed;left:50%;top:22%;transform:translate(-50%,-50%);
+    z-index:6;pointer-events:none;user-select:none;
+    width:min(62vw, 720px);
+    transition:filter .35s ease, opacity .3s ease;
+    will-change:filter,transform;
+  }
+  .logo-wrap.hidden{opacity:0;pointer-events:none}
+  .logo-wrap img{
+    width:100%;height:auto;display:block;
+    filter: drop-shadow(0 2px 18px rgba(11,22,51,.55));
+  }
+  .logo-wrap.color img{
+    filter: drop-shadow(0 4px 26px rgba(11,22,51,.65)) drop-shadow(0 0 10px rgba(244,196,48,.15));
+  }
+  .logo-wrap .ring{
+    position:absolute;inset:-12% -6%;border-radius:50%;
+    background:radial-gradient(closest-side, rgba(244,196,48,.25), rgba(244,196,48,0) 70%);
+    filter:blur(4px);
+    z-index:-1;
+    opacity:.0;
+    transition:opacity .4s ease;
+  }
+  .logo-wrap.warm .ring{opacity:.85}
+
+  .toggles{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:11;
+    display:flex;gap:6px;
+    background:rgba(11,22,51,.45);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border:1px solid rgba(184,205,232,.16);
+    border-radius:14px;padding:6px;
+  }
+  .toggles button{
+    appearance:none;border:0;background:transparent;
+    color:rgba(233,238,249,.62);
+    font-family:inherit;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+    padding:9px 14px;border-radius:9px;cursor:pointer;transition:all .2s ease;
+  }
+  .toggles button:hover{color:#E9EEF9;background:rgba(184,205,232,.06)}
+  .toggles button.on{
+    background:#F4C430;color:#0B1633;
+    box-shadow:0 4px 20px -4px rgba(244,196,48,.5);
+  }
+  .hint{
+    position:fixed;top:20px;left:22px;z-index:10;
+    font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;
+    color:rgba(233,238,249,.6);
+    background:rgba(11,22,51,.4);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    border:1px solid rgba(184,205,232,.14);
+    padding:10px 14px;border-radius:999px;
+  }
+  .hintHIDDEN{
+    display:none;
+  }
+  .hint b{color:#F4C430;font-weight:600}
+
+  /* Tweaks panel */
+  .tweaks{
+    position:fixed;right:22px;bottom:22px;z-index:11;
+    width:280px;display:none;
+    background:rgba(11,22,51,.55);
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border:1px solid rgba(184,205,232,.16);
+    border-radius:14px;
+    padding:16px;color:#E9EEF9;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    font-size:11px;
+  }
+  .tweaks.on{display:block}
+  .tweaks h3{
+    margin:0 0 12px;font-size:10px;letter-spacing:.3em;text-transform:uppercase;
+    color:#F4C430;font-weight:600;
+  }
+  .tweaks .group{margin-bottom:14px}
+  .tweaks .row{display:flex;justify-content:space-between;margin-bottom:6px;letter-spacing:.08em;color:rgba(233,238,249,.7);text-transform:uppercase;font-size:9.5px}
+  .tweaks .row span.v{color:#B8CDE8}
+  .tweaks input[type=range]{width:100%;accent-color:#F4C430}
+  .tweaks .seg{display:flex;gap:4px;background:rgba(184,205,232,.06);border-radius:8px;padding:3px}
+  .tweaks .seg button{
+    flex:1;appearance:none;border:0;background:transparent;color:rgba(233,238,249,.6);
+    font-family:inherit;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+    padding:7px 6px;border-radius:6px;cursor:pointer;transition:all .18s ease;
+  }
+  .tweaks .seg button:hover{color:#E9EEF9}
+  .tweaks .seg button.on{background:#F4C430;color:#0B1633}
+  .tweaks .toggle{cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;padding:4px 0}
+  .tweaks .sw-pill{
+    position:relative;display:inline-block;width:30px;height:16px;border-radius:999px;
+    background:rgba(184,205,232,.18);border:1px solid rgba(184,205,232,.22);
+    transition:background .18s ease;vertical-align:middle;
+  }
+  .tweaks .sw-knob{
+    position:absolute;top:1px;left:1px;width:12px;height:12px;border-radius:50%;
+    background:#B8CDE8;transition:transform .18s ease, background .18s ease;
+  }
+  .tweaks .toggle.on .sw-pill{background:#F4C430}
+  .tweaks .toggle.on .sw-knob{transform:translateX(14px);background:#0B1633}
+  .badge{
+    display:none;
+  }
+  .badge-OLD{
+    position:fixed;top:20px;right:22px;z-index:10;
+    font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;
+    color:rgba(233,238,249,.6);
+    background:rgba(11,22,51,.4);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    border:1px solid rgba(184,205,232,.14);
+    padding:10px 14px;border-radius:999px;
+  }
+  .badge .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#F4C430;box-shadow:0 0 10px #F4C430;margin-right:8px;vertical-align:1px}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="logo-wrap" id="logoWrap">
+  <div class="ring"></div>
+  <img id="logo" src="assets/acdc-logo-white.png" alt="ACDC 2026">
+</div>
+<img class="skyline" id="skyline" src="assets/nola-skyline.png" alt="">
+
+<div class="tweaks" id="tweaks">
+  <h3>Tweaks</h3>
+
+  <div class="group">
+    <div class="row"><span>Logo</span><span class="v" id="vLogo">WHITE</span></div>
+    <div class="seg" id="segLogo">
+      <button data-mode="white" class="on">White</button>
+      <button data-mode="color">Color</button>
+      <button data-mode="off">Hide</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="row"><span>Logo size</span><span class="v" id="vSize">62%</span></div>
+    <input type="range" id="sSize" min="25" max="90" step="1" value="62">
+  </div>
+
+  <div class="group">
+    <div class="row"><span>Logo position</span><span class="v" id="vPos">22%</span></div>
+    <input type="range" id="sPos" min="8" max="55" step="1" value="22">
+  </div>
+
+  <div class="group">
+    <div class="row"><span>Sky speed</span><span class="v" id="vSpeed">1.00</span></div>
+    <input type="range" id="sSpeed" min="0" max="3" step="0.05" value="1">
+  </div>
+
+  <div class="group">
+    <div class="row"><span>Cloud density</span><span class="v" id="vClouds">1.00</span></div>
+    <input type="range" id="sClouds" min="0" max="2" step="0.05" value="1">
+  </div>
+
+  <div class="group">
+    <div class="row"><span>Skyline darkness</span><span class="v" id="vDark">1.15</span></div>
+    <input type="range" id="sDark" min="0.8" max="2" step="0.01" value="1.15">
+  </div>
+
+  <label class="toggle on" id="tParallax">
+    <span>Parallax</span><span class="sw-pill"><span class="sw-knob"></span></span>
+  </label>
+  <label class="toggle on" id="tGodrays">
+    <span>God rays</span><span class="sw-pill"><span class="sw-knob"></span></span>
+  </label>
+</div>
+
+<script>
+const VERT = `attribute vec2 p; void main(){ gl_Position=vec4(p,0.,1.); }`;
+
+const FRAG = `
+precision highp float;
+uniform vec2  uRes;
+uniform vec2  uMouse;       // 0..1
+uniform float uTime;
+uniform vec4  uFlashes[4];  // xy, age, strength
+uniform float uSpeed;
+uniform float uClouds;
+uniform float uRays;
+
+float hash(vec2 p){ return fract(sin(dot(p,vec2(27.61,57.13)))*43758.5453); }
+vec2 hash2(vec2 p){
+  p = vec2(dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)));
+  return -1.0 + 2.0*fract(sin(p)*43758.5453);
+}
+float gnoise(vec2 p){
+  vec2 i=floor(p), f=fract(p);
+  vec2 u=f*f*f*(f*(f*6.0-15.0)+10.0);
+  float a = dot(hash2(i+vec2(0,0)), f-vec2(0,0));
+  float b = dot(hash2(i+vec2(1,0)), f-vec2(1,0));
+  float c = dot(hash2(i+vec2(0,1)), f-vec2(0,1));
+  float d = dot(hash2(i+vec2(1,1)), f-vec2(1,1));
+  return 0.5 + 0.5*mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+}
+float fbm(vec2 p){
+  float v=0., a=0.5;
+  mat2 R = mat2(0.877,-0.479,0.479,0.877);
+  for(int i=0;i<6;i++){ v += a*gnoise(p); p = R*p*2.02; a*=0.5; }
+  return v;
+}
+
+// Palette (ACDC) — warm dawn through cool dusk
+vec3 C_DAWN_LOW  = vec3(0.996, 0.831, 0.431);  // warm peach
+vec3 C_DAWN_MID  = vec3(0.965, 0.690, 0.373);  // orange
+vec3 C_DAWN_HI   = vec3(1.000, 0.945, 0.780);  // cream halo
+vec3 C_SKY_HI    = vec3(0.722, 0.804, 0.910);  // sky blue
+vec3 C_SKY_MID   = vec3(0.420, 0.478, 0.670);  // muted blue-purple
+vec3 C_SKY_DEEP  = vec3(0.165, 0.220, 0.420);  // deep blue
+vec3 C_NIGHT     = vec3(0.086, 0.149, 0.310);  // navy2
+vec3 C_DEEP      = vec3(0.043, 0.086, 0.200);  // navy
+vec3 C_GOLD      = vec3(0.957, 0.769, 0.188);
+vec3 C_PURP      = vec3(0.420, 0.357, 0.584);
+
+void main(){
+  vec2 uv = gl_FragCoord.xy/uRes.xy;
+  vec2 p = uv; p.x *= uRes.x/uRes.y;
+  vec2 sun = uMouse; sun.x *= uRes.x/uRes.y;
+
+  float t = uTime*0.08*uSpeed;
+
+  // ---- Base sky gradient: vertical blend reacts to sun height ----
+  float sunH = uMouse.y;                    // 0 = bottom (dusk), 1 = top (noon)
+  // darker sky when sun is low/high off-frame
+  float dayAmount = smoothstep(0.05, 0.75, sunH);
+  // warm horizon glow strength rises as sun approaches horizon
+  float horizonHeat = 1.0 - smoothstep(0.0, 0.55, abs(sunH - 0.35));
+
+  // vertical fade
+  vec3 top = mix(C_SKY_DEEP, C_SKY_HI, dayAmount);
+  top = mix(C_NIGHT, top, smoothstep(-0.1, 0.25, sunH));
+  vec3 bot = mix(C_DAWN_MID, C_DAWN_LOW, 0.5);
+  bot = mix(C_SKY_MID*0.8, bot, horizonHeat);
+  vec3 sky = mix(bot, top, smoothstep(0.05, 1.0, uv.y + 0.1));
+
+  // ---- Watercolor cloud bands (fbm, drifting) ----
+  vec2 cq = p*1.8 + vec2(t*1.2, t*0.2);
+  float clouds = fbm(cq);
+  // shape the clouds into horizontal bands
+  float band = smoothstep(0.35, 0.85, clouds - uv.y*0.3 + 0.2);
+  vec3 cloudTint = mix(C_DAWN_HI, C_SKY_HI, dayAmount);
+  cloudTint = mix(cloudTint, C_PURP*1.1, 1.0 - dayAmount);
+  sky = mix(sky, cloudTint, band*0.55*uClouds);
+
+  // softer high haze
+  float haze = fbm(p*0.9 + vec2(-t*0.4, t*0.1));
+  sky += mix(C_DAWN_LOW, C_SKY_HI, dayAmount) * haze * 0.12 * (1.0-uv.y*0.4);
+
+  // ---- Sun / moon disc ----
+  float sunD = distance(p, sun);
+  // core
+  float disc = smoothstep(0.08, 0.0, sunD);
+  // halo
+  float halo = exp(-sunD*2.2);
+  float bloom = exp(-sunD*5.5);
+
+  // sun color shifts with height: low = warm gold, high = bright white
+  vec3 sunCol = mix(C_DAWN_MID, vec3(1.0,0.97,0.85), smoothstep(0.2, 0.85, sunH));
+  // at night (sun below horizon) the disc becomes a pale moon
+  vec3 moonCol = vec3(0.88, 0.92, 1.0);
+  vec3 discCol = mix(moonCol, sunCol, smoothstep(-0.05, 0.15, sunH));
+
+  sky += discCol * disc;
+  sky += mix(C_GOLD*1.1, C_SKY_HI*0.9, dayAmount) * halo * (0.55 + 0.45*horizonHeat);
+  sky += discCol * bloom * 0.45;
+
+  // ---- God rays from the sun (radial streaks via angle-modulated noise) ----
+  vec2 dir = p - sun;
+  float ang = atan(dir.y, dir.x);
+  float rayNoise = fbm(vec2(ang*6.0, length(dir)*2.5 - t*2.0));
+  float rays = smoothstep(0.45, 0.95, rayNoise);
+  rays *= exp(-length(dir)*1.2);
+  rays *= 0.35 + 0.65*horizonHeat;          // rays strongest near horizon
+  sky += mix(C_GOLD, C_DAWN_HI, 0.5) * rays * 0.55 * uRays;
+
+  // ---- Horizon mist / river fog near bottom ----
+  float fogBand = smoothstep(0.35, 0.0, uv.y);
+  float fogN = fbm(p*vec2(3.0,6.0) + vec2(t*1.5, 0.0));
+  vec3 fogCol = mix(C_PURP*0.7, C_DAWN_LOW*0.9, horizonHeat);
+  sky = mix(sky, fogCol, fogBand * (0.35 + 0.35*fogN));
+
+  // ---- Lightning flashes behind the city ----
+  float flash = 0.0;
+  for(int i=0;i<4;i++){
+    vec4 f = uFlashes[i];
+    if(f.w<=0.0) continue;
+    vec2 fp = f.xy; fp.x *= uRes.x/uRes.y;
+    float d = distance(p, fp);
+    // quick bright pulse that decays fast
+    float pulse = f.w * exp(-f.z*6.0);
+    // jagged bolt-ish vertical streak from flash origin downward
+    float boltNoise = fbm(vec2((p.x-fp.x)*80.0 + f.z*100.0, p.y*6.0));
+    float bolt = smoothstep(0.52, 0.58, boltNoise) * smoothstep(0.0, 0.35, fp.y - p.y + 0.2);
+    bolt *= pulse * 2.0;
+    // ambient flash halo across sky
+    float halo2 = pulse * exp(-d*1.2) * 0.6;
+    flash += halo2 + bolt*0.9;
+  }
+  sky += vec3(0.85, 0.92, 1.1) * flash;
+
+  // ---- Watercolor paper grain ----
+  float grain = fbm(p*40.0 + uTime*0.01);
+  sky *= 0.94 + 0.06*grain;
+  // subtle edge darkening
+  vec2 vg = uv-0.5; float vign = 1.0 - dot(vg,vg)*0.6;
+  sky *= vign;
+
+  // dither
+  sky += (hash(gl_FragCoord.xy + uTime) - 0.5) * 0.012;
+
+  sky = pow(sky, vec3(0.95));
+  gl_FragColor = vec4(sky, 1.0);
+}
+`;
+
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl', {antialias:false, premultipliedAlpha:false});
+if(!gl){ document.body.innerHTML = '<p style="padding:30px;color:#fff">WebGL required.</p>'; throw 0; }
+
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.bindAttribLocation(prog, 0, 'p');
+gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+const uRes = gl.getUniformLocation(prog, 'uRes');
+const uMouse = gl.getUniformLocation(prog, 'uMouse');
+const uTime = gl.getUniformLocation(prog, 'uTime');
+const uFlashes = gl.getUniformLocation(prog, 'uFlashes[0]');
+const uSpeed = gl.getUniformLocation(prog, 'uSpeed');
+const uClouds = gl.getUniformLocation(prog, 'uClouds');
+const uRays = gl.getUniformLocation(prog, 'uRays');
+
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio||1, 1.75);
+  canvas.width = Math.floor(innerWidth*dpr);
+  canvas.height = Math.floor(innerHeight*dpr);
+  gl.viewport(0,0,canvas.width,canvas.height);
+}
+addEventListener('resize', resize); resize();
+
+const state = {
+  mouse:[0.55, 0.45], target:[0.55, 0.45],
+  flashes: Array.from({length:4},()=>({x:0,y:0,age:999,str:0})),
+  flashPtr: 0,
+  t0: performance.now()
+};
+
+addEventListener('pointermove', e=>{
+  state.target[0] = e.clientX/innerWidth;
+  state.target[1] = 1 - e.clientY/innerHeight;
+});
+addEventListener('pointerdown', e=>{
+  // flash origin near top of page, offset horizontally toward click
+  const x = e.clientX/innerWidth;
+  const y = Math.max(0.55, 1 - e.clientY/innerHeight + 0.2);
+  const slot = state.flashes[state.flashPtr];
+  slot.x = x; slot.y = y; slot.age = 0; slot.str = 1;
+  state.flashPtr = (state.flashPtr+1) % state.flashes.length;
+  // queue a quick second sub-strike for thunder realism
+  setTimeout(()=>{
+    const s2 = state.flashes[state.flashPtr];
+    s2.x = x + (Math.random()-0.5)*0.1; s2.y = y + (Math.random()-0.5)*0.05;
+    s2.age = 0; s2.str = 0.7;
+    state.flashPtr = (state.flashPtr+1) % state.flashes.length;
+  }, 120 + Math.random()*120);
+});
+
+let last = performance.now();
+
+// Logo toggle
+const logoImg = document.getElementById('logo');
+const logoWrap = document.getElementById('logoWrap');
+const segLogoEl = document.getElementById('segLogo');
+const LOGO_SRC = { white:'assets/acdc-logo-white.png', color:'assets/acdc-logo-color.png' };
+let logoMode = localStorage.getItem('nola-logo-mode') || 'white';
+function applyLogoMode(m){
+  logoMode = m;
+  [...segLogoEl.children].forEach(b=>b.classList.toggle('on', b.dataset.mode===m));
+  document.getElementById('vLogo').textContent = m.toUpperCase();
+  if(m==='off'){ logoWrap.classList.add('hidden'); }
+  else{
+    logoWrap.classList.remove('hidden');
+    logoImg.src = LOGO_SRC[m];
+    logoWrap.classList.toggle('color', m==='color');
+  }
+  try{ localStorage.setItem('nola-logo-mode', m); }catch(e){}
+}
+segLogoEl.addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  applyLogoMode(b.dataset.mode);
+});
+applyLogoMode(logoMode);
+
+// Tweak state
+const tweakState = {
+  size: 62,
+  pos: 22,
+  speed: 1,
+  clouds: 1,
+  darkness: 1.15,
+  parallax: true,
+  godrays: true
+};
+function applyLogoLayout(){
+  logoWrap.style.width = `min(${tweakState.size}vw, ${tweakState.size*11.6}px)`;
+  logoWrap.style.top = tweakState.pos + '%';
+}
+applyLogoLayout();
+
+function bindSlider(id, val, key, fmt){
+  const s = document.getElementById(id);
+  const v = document.getElementById(val);
+  const render = ()=>{ v.textContent = fmt ? fmt(parseFloat(s.value)) : parseFloat(s.value).toFixed(2); };
+  s.addEventListener('input', ()=>{
+    tweakState[key] = parseFloat(s.value);
+    render();
+    if(key==='size' || key==='pos') applyLogoLayout();
+  });
+  render();
+}
+bindSlider('sSize','vSize','size', x=>Math.round(x)+'%');
+bindSlider('sPos','vPos','pos', x=>Math.round(x)+'%');
+bindSlider('sSpeed','vSpeed','speed');
+bindSlider('sClouds','vClouds','clouds');
+bindSlider('sDark','vDark','darkness');
+
+function bindToggle(id, key){
+  const el = document.getElementById(id);
+  el.addEventListener('click', ()=>{
+    tweakState[key] = !tweakState[key];
+    el.classList.toggle('on', tweakState[key]);
+  });
+}
+bindToggle('tParallax','parallax');
+bindToggle('tGodrays','godrays');
+
+// Tweaks host protocol
+const tweaksEl = document.getElementById('tweaks');
+window.addEventListener('message', e=>{
+  const d = e.data||{};
+  if(d.type==='__activate_edit_mode') tweaksEl.classList.add('on');
+  if(d.type==='__deactivate_edit_mode') tweaksEl.classList.remove('on');
+});
+setTimeout(()=>{ try{ window.parent.postMessage({type:'__edit_mode_available'},'*'); }catch(e){} },0);
+function loop(now){
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+
+  state.mouse[0] += (state.target[0]-state.mouse[0]) * Math.min(1, dt*7);
+  state.mouse[1] += (state.target[1]-state.mouse[1]) * Math.min(1, dt*7);
+
+  for(const f of state.flashes){
+    if(f.str>0){ f.age += dt; f.str = Math.max(0, f.str - dt*2.2); }
+  }
+
+  gl.uniform2f(uRes, canvas.width, canvas.height);
+  gl.uniform2f(uMouse, state.mouse[0], state.mouse[1]);
+  gl.uniform1f(uTime, (now - state.t0)/1000);
+  const buf = new Float32Array(16);
+  for(let i=0;i<4;i++){
+    const f = state.flashes[i];
+    buf[i*4+0]=f.x; buf[i*4+1]=f.y; buf[i*4+2]=f.age; buf[i*4+3]=f.str;
+  }
+  gl.uniform4fv(uFlashes, buf);
+  gl.uniform1f(uSpeed, tweakState.speed);
+  gl.uniform1f(uClouds, tweakState.clouds);
+  gl.uniform1f(uRays, tweakState.godrays ? 1.0 : 0.0);
+
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+  // flash the skyline image on lightning (quick brightness pulse)
+  let maxStr = 0;
+  for(const f of state.flashes){ if(f.str>maxStr) maxStr = f.str; }
+  const sk = document.getElementById('skyline');
+  sk.style.filter = `contrast(${tweakState.darkness + maxStr*0.25}) saturate(${0.6 - maxStr*0.2}) brightness(${1 - maxStr*0.25})`;
+
+  // Logo reacts to sun position and lightning:
+  // • sun height warms the drop-shadow tint
+  // • proximity of cursor to logo makes it glow brighter (like the sun illuminating it)
+  // • lightning flashes brighten the logo to white
+  const logoWrap = document.getElementById('logoWrap');
+  const logo = document.getElementById('logo');
+  const lx = 0.5;
+  const ly = 1 - (tweakState.pos/100);
+  const dx = state.mouse[0]-lx, dy = state.mouse[1]-ly;
+  const prox = Math.exp(-Math.sqrt(dx*dx+dy*dy)*2.5);
+  const sunH = state.mouse[1];
+  // warm during low sun / dawn; cool sky blue during day; gold glow at night
+  const dayAmt = Math.max(0, Math.min(1, (sunH-0.05)/0.7));
+  const warm = (1 - Math.abs(sunH - 0.35)/0.55);
+  const glowAmt = Math.max(0, Math.min(1, prox + warm*0.4 + maxStr));
+  // shadow color shifts
+  const warmCol  = `rgba(244,196,48, ${0.35 + 0.45*glowAmt})`;
+  const coolCol  = `rgba(184,205,232, ${0.30 + 0.35*glowAmt})`;
+  const shadow = sunH < 0.15
+    ? `drop-shadow(0 0 ${12+24*glowAmt}px ${warmCol})`
+    : dayAmt > 0.6
+      ? `drop-shadow(0 2px ${14+18*glowAmt}px ${coolCol})`
+      : `drop-shadow(0 2px ${14+26*glowAmt}px ${warmCol})`;
+  const bright = 1 + maxStr*0.6 + prox*0.15;
+  logo.style.filter = `${shadow} brightness(${bright})`;
+  // gold halo ring fades in when near horizon or cursor
+  logoWrap.classList.toggle('warm', (warm>0.55) || prox>0.45 || maxStr>0.2);
+  // parallax toggle
+  const px = tweakState.parallax ? (state.mouse[0]-0.5) * -8 : 0;
+  const py = tweakState.parallax ? (state.mouse[1]-0.5) *  6 : 0;
+  logoWrap.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
