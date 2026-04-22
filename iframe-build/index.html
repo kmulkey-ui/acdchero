@@ -129,6 +129,20 @@
   }
   .badge .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#F4C430;box-shadow:0 0 10px #F4C430;margin-right:8px;vertical-align:1px}
 </style>
+<template id="__bundler_thumbnail" data-bg-color="#0B1633">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#1A2540"/>
+        <stop offset="60%" stop-color="#8A6A5E"/>
+        <stop offset="100%" stop-color="#F4C430"/>
+      </linearGradient>
+    </defs>
+    <rect width="1200" height="800" fill="url(#sky)"/>
+    <circle cx="600" cy="520" r="90" fill="#F4C430" opacity="0.85"/>
+    <path d="M0 680 L80 680 L100 640 L140 640 L160 620 L200 620 L220 600 L260 600 L280 640 L340 640 L360 600 L400 600 L420 560 L460 560 L480 540 L520 540 L540 500 L580 500 L600 460 L640 460 L660 500 L700 500 L720 480 L760 480 L780 520 L820 520 L840 560 L900 560 L920 600 L960 600 L980 640 L1040 640 L1060 660 L1200 660 L1200 800 L0 800 Z" fill="#0B1633"/>
+  </svg>
+</template>
 </head>
 <body>
 <canvas id="gl"></canvas>
@@ -253,8 +267,8 @@ void main(){
   // ---- Watercolor cloud bands (fbm, drifting) ----
   vec2 cq = p*1.8 + vec2(t*1.2, t*0.2);
   float clouds = fbm(cq);
-  // shape the clouds into horizontal bands
-  float band = smoothstep(0.35, 0.85, clouds - uv.y*0.3 + 0.2);
+  // shape the clouds into horizontal bands (softer edges to avoid visible banding)
+  float band = smoothstep(0.25, 0.95, clouds - uv.y*0.3 + 0.2);
   vec3 cloudTint = mix(C_DAWN_HI, C_SKY_HI, dayAmount);
   cloudTint = mix(cloudTint, C_PURP*1.1, 1.0 - dayAmount);
   sky = mix(sky, cloudTint, band*0.55*uClouds);
@@ -322,8 +336,8 @@ void main(){
   vec2 vg = uv-0.5; float vign = 1.0 - dot(vg,vg)*0.6;
   sky *= vign;
 
-  // dither
-  sky += (hash(gl_FragCoord.xy + uTime) - 0.5) * 0.012;
+  // dither — stronger to break up 8-bit banding on mobile
+  sky += (hash(gl_FragCoord.xy + uTime) - 0.5) * 0.028;
 
   sky = pow(sky, vec3(0.95));
   gl_FragColor = vec4(sky, 1.0);
