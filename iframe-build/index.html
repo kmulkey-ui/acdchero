@@ -17,9 +17,9 @@
     filter: contrast(1.15) saturate(.6);
   }
   .logo-wrap{
-    position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);
+    position:fixed;left:50%;top:22%;transform:translate(-50%,-50%);
     z-index:6;pointer-events:none;user-select:none;
-    width:min(38vw, 440px);
+    width:min(62vw, 720px);
     transition:filter .35s ease, opacity .3s ease;
     will-change:filter,transform;
   }
@@ -165,13 +165,13 @@
   </div>
 
   <div class="group">
-    <div class="row"><span>Logo size</span><span class="v" id="vSize">38%</span></div>
-    <input type="range" id="sSize" min="25" max="90" step="1" value="38">
+    <div class="row"><span>Logo size</span><span class="v" id="vSize">62%</span></div>
+    <input type="range" id="sSize" min="25" max="90" step="1" value="62">
   </div>
 
   <div class="group">
-    <div class="row"><span>Logo position</span><span class="v" id="vPos">38%</span></div>
-    <input type="range" id="sPos" min="8" max="55" step="1" value="38">
+    <div class="row"><span>Logo position</span><span class="v" id="vPos">22%</span></div>
+    <input type="range" id="sPos" min="8" max="55" step="1" value="22">
   </div>
 
   <div class="group">
@@ -336,8 +336,8 @@ void main(){
   vec2 vg = uv-0.5; float vign = 1.0 - dot(vg,vg)*0.6;
   sky *= vign;
 
-  // dither — very strong to break up 8-bit banding on mobile panels
-  sky += (hash(gl_FragCoord.xy + uTime) - 0.5) * 0.06;
+  // dither — stronger to break up 8-bit banding on mobile
+  sky += (hash(gl_FragCoord.xy + uTime) - 0.5) * 0.028;
 
   sky = pow(sky, vec3(0.95));
   gl_FragColor = vec4(sky, 1.0);
@@ -439,8 +439,8 @@ applyLogoMode(logoMode);
 
 // Tweak state
 const tweakState = {
-  size: 38,
-  pos: 38,
+  size: 62,
+  pos: 22,
   speed: 1,
   clouds: 1,
   darkness: 1.15,
