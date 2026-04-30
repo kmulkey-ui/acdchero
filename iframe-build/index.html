@@ -8,11 +8,11 @@
   html,body{margin:0;height:100%;background:#0B1633;overflow:hidden;cursor:crosshair;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;color:#E9EEF9}
   html,body{width:100%;max-width:100%;overscroll-behavior:none}
   *{box-sizing:border-box}
+  body.hide-cursor,body.hide-cursor *{cursor:none!important}
   canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
   .skyline{
     position:fixed;left:0;right:0;bottom:0;width:100%;
     pointer-events:none;z-index:5;user-select:none;
-    /* The PNG has a light wash behind the silhouette; blend so only dark pixels punch through */
     mix-blend-mode:multiply;
     filter: contrast(1.15) saturate(.6);
   }
@@ -252,12 +252,9 @@ void main(){
 
   // ---- Base sky gradient: vertical blend reacts to sun height ----
   float sunH = uMouse.y;                    // 0 = bottom (dusk), 1 = top (noon)
-  // darker sky when sun is low/high off-frame
   float dayAmount = smoothstep(0.05, 0.75, sunH);
-  // warm horizon glow strength rises as sun approaches horizon
   float horizonHeat = 1.0 - smoothstep(0.0, 0.55, abs(sunH - 0.35));
 
-  // vertical fade
   vec3 top = mix(C_SKY_DEEP, C_SKY_HI, dayAmount);
   top = mix(C_NIGHT, top, smoothstep(-0.1, 0.25, sunH));
   vec3 bot = mix(C_DAWN_MID, C_DAWN_LOW, 0.5);
@@ -267,27 +264,21 @@ void main(){
   // ---- Watercolor cloud bands (fbm, drifting) ----
   vec2 cq = p*1.8 + vec2(t*1.2, t*0.2);
   float clouds = fbm(cq);
-  // shape the clouds into horizontal bands (softer edges to avoid visible banding)
   float band = smoothstep(0.25, 0.95, clouds - uv.y*0.3 + 0.2);
   vec3 cloudTint = mix(C_DAWN_HI, C_SKY_HI, dayAmount);
   cloudTint = mix(cloudTint, C_PURP*1.1, 1.0 - dayAmount);
   sky = mix(sky, cloudTint, band*0.55*uClouds);
 
-  // softer high haze
   float haze = fbm(p*0.9 + vec2(-t*0.4, t*0.1));
   sky += mix(C_DAWN_LOW, C_SKY_HI, dayAmount) * haze * 0.12 * (1.0-uv.y*0.4);
 
   // ---- Sun / moon disc ----
   float sunD = distance(p, sun);
-  // core
   float disc = smoothstep(0.08, 0.0, sunD);
-  // halo
   float halo = exp(-sunD*2.2);
   float bloom = exp(-sunD*5.5);
 
-  // sun color shifts with height: low = warm gold, high = bright white
   vec3 sunCol = mix(C_DAWN_MID, vec3(1.0,0.97,0.85), smoothstep(0.2, 0.85, sunH));
-  // at night (sun below horizon) the disc becomes a pale moon
   vec3 moonCol = vec3(0.88, 0.92, 1.0);
   vec3 discCol = mix(moonCol, sunCol, smoothstep(-0.05, 0.15, sunH));
 
@@ -295,50 +286,44 @@ void main(){
   sky += mix(C_GOLD*1.1, C_SKY_HI*0.9, dayAmount) * halo * (0.55 + 0.45*horizonHeat);
   sky += discCol * bloom * 0.45;
 
-  // ---- God rays from the sun (radial streaks via angle-modulated noise) ----
+  // ---- God rays ----
   vec2 dir = p - sun;
   float ang = atan(dir.y, dir.x);
   float rayNoise = fbm(vec2(ang*6.0, length(dir)*2.5 - t*2.0));
   float rays = smoothstep(0.45, 0.95, rayNoise);
   rays *= exp(-length(dir)*1.2);
-  rays *= 0.35 + 0.65*horizonHeat;          // rays strongest near horizon
+  rays *= 0.35 + 0.65*horizonHeat;
   sky += mix(C_GOLD, C_DAWN_HI, 0.5) * rays * 0.55 * uRays;
 
-  // ---- Horizon mist / river fog near bottom ----
+  // ---- Horizon mist ----
   float fogBand = smoothstep(0.35, 0.0, uv.y);
   float fogN = fbm(p*vec2(3.0,6.0) + vec2(t*1.5, 0.0));
   vec3 fogCol = mix(C_PURP*0.7, C_DAWN_LOW*0.9, horizonHeat);
   sky = mix(sky, fogCol, fogBand * (0.35 + 0.35*fogN));
 
-  // ---- Lightning flashes behind the city ----
+  // ---- Lightning flashes ----
   float flash = 0.0;
   for(int i=0;i<4;i++){
     vec4 f = uFlashes[i];
     if(f.w<=0.0) continue;
     vec2 fp = f.xy; fp.x *= uRes.x/uRes.y;
     float d = distance(p, fp);
-    // quick bright pulse that decays fast
     float pulse = f.w * exp(-f.z*6.0);
-    // jagged bolt-ish vertical streak from flash origin downward
     float boltNoise = fbm(vec2((p.x-fp.x)*80.0 + f.z*100.0, p.y*6.0));
     float bolt = smoothstep(0.52, 0.58, boltNoise) * smoothstep(0.0, 0.35, fp.y - p.y + 0.2);
     bolt *= pulse * 2.0;
-    // ambient flash halo across sky
     float halo2 = pulse * exp(-d*1.2) * 0.6;
     flash += halo2 + bolt*0.9;
   }
   sky += vec3(0.85, 0.92, 1.1) * flash;
 
-  // ---- Watercolor paper grain ----
+  // ---- Grain + vignette ----
   float grain = fbm(p*40.0 + uTime*0.01);
   sky *= 0.94 + 0.06*grain;
-  // subtle edge darkening
   vec2 vg = uv-0.5; float vign = 1.0 - dot(vg,vg)*0.6;
   sky *= vign;
 
-  // dither — stronger to break up 8-bit banding on mobile
   sky += (hash(gl_FragCoord.xy + uTime) - 0.5) * 0.028;
-
   sky = pow(sky, vec3(0.95));
   gl_FragColor = vec4(sky, 1.0);
 }
@@ -368,13 +353,13 @@ gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1])
 gl.enableVertexAttribArray(0);
 gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-const uRes = gl.getUniformLocation(prog, 'uRes');
-const uMouse = gl.getUniformLocation(prog, 'uMouse');
-const uTime = gl.getUniformLocation(prog, 'uTime');
+const uRes    = gl.getUniformLocation(prog, 'uRes');
+const uMouse  = gl.getUniformLocation(prog, 'uMouse');
+const uTime   = gl.getUniformLocation(prog, 'uTime');
 const uFlashes = gl.getUniformLocation(prog, 'uFlashes[0]');
-const uSpeed = gl.getUniformLocation(prog, 'uSpeed');
+const uSpeed  = gl.getUniformLocation(prog, 'uSpeed');
 const uClouds = gl.getUniformLocation(prog, 'uClouds');
-const uRays = gl.getUniformLocation(prog, 'uRays');
+const uRays   = gl.getUniformLocation(prog, 'uRays');
 
 function resize(){
   const dpr = Math.min(window.devicePixelRatio||1, 1.75);
@@ -391,18 +376,25 @@ const state = {
   t0: performance.now()
 };
 
+// Hide cursor while interacting with the canvas
+let cursorTimer = null;
 addEventListener('pointermove', e=>{
   state.target[0] = e.clientX/innerWidth;
   state.target[1] = 1 - e.clientY/innerHeight;
+  document.body.classList.add('hide-cursor');
+  clearTimeout(cursorTimer);
 });
+addEventListener('pointerleave', ()=>{
+  document.body.classList.remove('hide-cursor');
+  clearTimeout(cursorTimer);
+});
+
 addEventListener('pointerdown', e=>{
-  // flash origin near top of page, offset horizontally toward click
   const x = e.clientX/innerWidth;
   const y = Math.max(0.55, 1 - e.clientY/innerHeight + 0.2);
   const slot = state.flashes[state.flashPtr];
   slot.x = x; slot.y = y; slot.age = 0; slot.str = 1;
   state.flashPtr = (state.flashPtr+1) % state.flashes.length;
-  // queue a quick second sub-strike for thunder realism
   setTimeout(()=>{
     const s2 = state.flashes[state.flashPtr];
     s2.x = x + (Math.random()-0.5)*0.1; s2.y = y + (Math.random()-0.5)*0.05;
@@ -488,6 +480,7 @@ window.addEventListener('message', e=>{
   if(d.type==='__deactivate_edit_mode') tweaksEl.classList.remove('on');
 });
 setTimeout(()=>{ try{ window.parent.postMessage({type:'__edit_mode_available'},'*'); }catch(e){} },0);
+
 function loop(now){
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now-last)/1000); last = now;
@@ -514,28 +507,23 @@ function loop(now){
 
   gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-  // flash the skyline image on lightning (quick brightness pulse)
+  // Flash skyline on lightning
   let maxStr = 0;
   for(const f of state.flashes){ if(f.str>maxStr) maxStr = f.str; }
   const sk = document.getElementById('skyline');
   sk.style.filter = `contrast(${tweakState.darkness + maxStr*0.25}) saturate(${0.6 - maxStr*0.2}) brightness(${1 - maxStr*0.25})`;
 
-  // Logo reacts to sun position and lightning:
-  // • sun height warms the drop-shadow tint
-  // • proximity of cursor to logo makes it glow brighter (like the sun illuminating it)
-  // • lightning flashes brighten the logo to white
-  const logoWrap = document.getElementById('logoWrap');
+  // Logo reacts to sun + lightning
+  const lw = document.getElementById('logoWrap');
   const logo = document.getElementById('logo');
   const lx = 0.5;
   const ly = 1 - (tweakState.pos/100);
   const dx = state.mouse[0]-lx, dy = state.mouse[1]-ly;
   const prox = Math.exp(-Math.sqrt(dx*dx+dy*dy)*2.5);
   const sunH = state.mouse[1];
-  // warm during low sun / dawn; cool sky blue during day; gold glow at night
   const dayAmt = Math.max(0, Math.min(1, (sunH-0.05)/0.7));
   const warm = (1 - Math.abs(sunH - 0.35)/0.55);
   const glowAmt = Math.max(0, Math.min(1, prox + warm*0.4 + maxStr));
-  // shadow color shifts
   const warmCol  = `rgba(244,196,48, ${0.35 + 0.45*glowAmt})`;
   const coolCol  = `rgba(184,205,232, ${0.30 + 0.35*glowAmt})`;
   const shadow = sunH < 0.15
@@ -545,16 +533,15 @@ function loop(now){
       : `drop-shadow(0 2px ${14+26*glowAmt}px ${warmCol})`;
   const bright = 1 + maxStr*0.6 + prox*0.15;
   logo.style.filter = `${shadow} brightness(${bright})`;
-  // gold halo ring fades in when near horizon or cursor
-  logoWrap.classList.toggle('warm', (warm>0.55) || prox>0.45 || maxStr>0.2);
-  // parallax toggle
+  lw.classList.toggle('warm', (warm>0.55) || prox>0.45 || maxStr>0.2);
   const px = tweakState.parallax ? (state.mouse[0]-0.5) * -8 : 0;
   const py = tweakState.parallax ? (state.mouse[1]-0.5) *  6 : 0;
-  logoWrap.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;
+  lw.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;
 }
 requestAnimationFrame(loop);
 </script>
 </body>
 </html>
+
 
 </html>
